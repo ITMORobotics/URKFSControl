@@ -1,0 +1,7 @@
+pybind11
+numpy
+scipy
+ur_rtde
+setuptools
+wheel
+urdf-parser-py
