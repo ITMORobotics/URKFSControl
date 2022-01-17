@@ -35,7 +35,7 @@ np.set_printoptions(precision=4, suppress=True)
 # ROS
 rospy.init_node('node_name')
 urdf_description = rospy.get_param('/robot_description')
-# with open('urdf_model/ur5e.urdf', 'r', encoding='utf-8') as f:
+# with open('urdf_model/ur5e_right.urdf', 'r', encoding='utf-8') as f:
 #     urdf_description = f.read()
 
 # Publishers

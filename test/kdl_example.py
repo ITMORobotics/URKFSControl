@@ -13,7 +13,7 @@ def main():
     print(q)
     base_link = 'world'
     tool_link = 'tool0'
-    urdf_file = open('urdf_model/ur5e.urdf','r')
+    urdf_file = open('urdf_model/ur5e_right.urdf','r')
     urdf_str = urdf_file.read()
     urdf_file.close()
 

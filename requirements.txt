@@ -5,3 +5,5 @@ ur_rtde
 setuptools
 wheel
 urdf-parser-py
+spatialmath-python
+sympy

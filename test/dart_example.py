@@ -6,7 +6,7 @@ np.set_printoptions(precision=4)
 def main():
 
     urdfParser = dart.utils.DartLoader()
-    kr5 = urdfParser.parseSkeleton("/media/files/URKFSControl/urdf_model/ur5e.urdf")
+    kr5 = urdfParser.parseSkeleton("/media/files/URKFSControl/urdf_model/ur5e_right.urdf")
     
     dofs = kr5.getNumDofs()
     ee = kr5.getBodyNode('tool0')
