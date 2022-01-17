@@ -12,6 +12,7 @@ def main():
     robot_model_left = robot.RobotModel('urdf_model/ur5e_left.urdf','world', 'tool0')
     robot_model_right = robot.RobotModel('urdf_model/ur5e_right.urdf','world', 'tool0')
     
+    jac_left = robot_model_left.jacobian()
 
 if __name__ == "__main__":
     main()

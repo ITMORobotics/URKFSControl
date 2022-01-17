@@ -1,4 +1,3 @@
-from itertools import chain
 import os,sys
 import numpy as np
 import logging
@@ -78,13 +77,18 @@ class RobotModel:
         translate = p
         return (p, angvec)
     
+    def rot(self, q: np.array) -> np.array:
+        end_frame = kdl.Frame()
+        T = self.__fk_posesolver.JntToCart(to_jnt_array(q), end_frame)
+        rot = to_np_matrix(kdl.Rotation(end_frame.M), 3)
+        return rot
+    
+    
     def twist(self, q: np.array, dq: np.array) -> np.array:
         vel_frame = kdl.FrameVel()
         self.__fk_velsolver.JntToCart(to_jnt_array_vel(q, dq), vel_frame)
         return to_np_matrix(vel_frame.GetTwist(),6)
 
-    def jacobian_dot(self, q: np.array, dq: np.array):
-        pass
 
 def to_np_matrix(kdl_data, size: int) -> np.array:
     if isinstance(kdl_data, (kdl.JntSpaceInertiaMatrix, kdl.Jacobian, kdl.Rotation)):
@@ -117,6 +121,8 @@ def to_jnt_array_vel(q: np.array, dq:np.array)-> kdl.JntArrayVel:
     jav.q = to_jnt_array(q)
     jav.qdot = to_jnt_array(dq)
     return jav
+
+def quaternioun(matrix: np.array) ->np.array:
 
 
 # def toJA(np_matrix):
