@@ -1,3 +1,4 @@
+from abc import abstractmethod
 import os,sys
 import numpy as np
 import logging
@@ -24,8 +25,9 @@ class UniversalRobot:
         self.__state = RobotState()
         self.update_state()
 
+
     def __del__(self):
-        self.control.speedStop()
+        self.__control.speedStop()
 
     @property
     def is_ok(self) -> bool:
@@ -39,6 +41,7 @@ class UniversalRobot:
     def state(self) -> RobotState:
         return self.__state
 
+    @abstractmethod
     def update_state(self):
         self.__state.q      = np.array(self.__receive.getActualQ())
         self.__state.dq     = np.array(self.__receive.getActualQd())
@@ -78,7 +81,6 @@ class RobotModel:
         p = to_np_matrix(end_frame.p,3)
         rot = to_np_matrix(kdl.Rotation(end_frame.M), 3)
         angvec = spmb.tr2angvec(rot, unit='rad', check=False)
-        translate = p
         return (p, angvec)
     
     def rot(self, q: np.ndarray) -> np.ndarray:
