@@ -16,6 +16,7 @@ import numpy as np
 from geometry_msgs.msg import WrenchStamped
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Header
+import median_filter as md
 
 J_NAMES = ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint']
 
@@ -24,13 +25,14 @@ TOOL = 'tool0'
 NUM_JOINTS = 6
 
 # JOINTS  = np.array([0, -np.pi/2, -np.pi/2, -np.pi, 0, 0])
-JOINTS  = np.array([0, -np.pi/2, -np.pi/2, -np.pi/2, -np.pi/2, 0])
+JOINTS  = np.array([0, -np.pi/2, -np.pi/2, -np.pi/2, np.pi/2, 0])
 DIR     = np.array([0, 0, -0.01, 0, 0, 0])
 DIR_F   = np.array([0, 0, -0.1, 0, 0, 0])
 R_Z     = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
 
 np.set_printoptions(precision=4, suppress=True)
 
+median = md.MedianFilter(6, 19)
 
 # ROS
 rospy.init_node('node_name')
@@ -145,7 +147,7 @@ for i in range(100000):
         R_Z @ robot1.state.f[0:3],
         R_Z @ robot1.state.f[3:],
     ))
-
+    fe = median.apply_median(fe)
     wrench.header = Header()
     wrench.header.stamp = rospy.Time.now()
     wrench.wrench.force.x   = fe[0]
@@ -157,7 +159,7 @@ for i in range(100000):
     wr_publisher.publish(wrench)
 
     # control
-    dir = direct_force_control(fe)
+    fdir = direct_force_control(fe)
 
     # jv = robot1.state.q + np.linalg.pinv(jac_arr).dot(fdir)
     jspeed = np.linalg.pinv(jac_arr).dot(fdir)
