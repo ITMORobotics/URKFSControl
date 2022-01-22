@@ -331,6 +331,15 @@
     <parent link="wrist_3_link"/>
     <child link="tool0"/>
   </joint>
+
+  <!-- Frame for gripper point -->
+  <link name="gripper_link"/>
+  <joint name="tool0-gripper_link_fixed_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0.0 0.0"/>
+    <parent link="tool0"/>
+    <child link="gripper_link"/>
+  </joint>
+
   <link name="world"/>
   <joint name="world_joint" type="fixed">
     <parent link="world"/>
