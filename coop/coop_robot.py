@@ -7,6 +7,8 @@ from rtde_control import RTDEControlInterface
 from rtde_receive import RTDEReceiveInterface
 
 import spatialmath.base as spmb
+from spatialmath import SE3
+import roboticstoolbox
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
@@ -79,7 +81,7 @@ class DualCoopModel:
     def relative_orient(self, q_tuple:Tuple[np.ndarray]) -> np.ndarray:
         rot_left = self.__coop_model[0].rot(q_tuple[0])
         rot_right = self.__coop_model[1].rot(q_tuple[1])
-        rot_relative = rot_left*rot_right.T
+        rot_relative = rot_right @ rot_left.T
         return rot_relative
 
     def absolute_orient(self, q_tuple:Tuple[np.ndarray]) -> np.ndarray:
@@ -125,3 +127,59 @@ class DualCoopModel:
     @property
     def size(self):
         return self.__size
+
+class CoopCartState():
+    def __init__(self):
+        self.__rel_tf = None
+        self.__abs_tf = None
+    
+    def from_matrices(self, rel_tf: np.ndarray, abs_tf: np.ndarray):
+        self.__rel_tf = SE3(rel_tf, check=False)
+        self.__rel_tf = SE3(abs_tf, check=False)
+    
+class SE3LineTrj():
+    def __init__(self, init_frame: SE3, finish_frame: SE3, dt: float, finish_time: float):
+        self.__init_frame = init_frame
+        self.__finish_frame = finish_frame
+        self.__dt = dt
+        self.__finish_time = finish_time
+        self.__trj = roboticstoolbox.tools.trajectory.ctraj(self.__init_frame, self.__finish_frame, t=finish_time)
+    
+    def getSE3(self, t: float) -> SE3:
+        if t<=0:
+            return self.__init_frame
+        if t>=self.__finish_time:
+            return self.__finish_frame
+        else:
+            return self.__trj[int(t/self.__dt)]
+
+def generate_simple_selection_matrix(allow_moves: np.ndarray) ->Tuple[np.ndarray, np.ndarray]:
+    
+    T_list = []
+    Y_list = []
+
+    T_columns = np.argwhere(allow_moves==1).flatten()
+    Y_columns = np.argwhere(allow_moves==0).flatten()
+
+    for i in range(0, T_columns.shape[0]):
+        T_nonzero_column = np.zeros((allow_moves.shape[0],1))
+        T_nonzero_column[T_columns[i] , 0] = 1.0
+        T_list.append(T_nonzero_column)
+
+    for i in range(0, Y_columns.shape[0]):
+        Y_nonzero_column = np.zeros((allow_moves.shape[0],1))
+        Y_nonzero_column[Y_columns[i] , 0] = 1.0
+        Y_list.append(Y_nonzero_column)
+    
+    if len(T_list)<1:
+        result_matrix_T = None
+    else:
+        result_matrix_T = np.concatenate(T_list, axis=1)
+        
+    if len(Y_list)<1:
+        result_matrix_Y = None
+    else:
+        result_matrix_Y = np.concatenate(Y_list, axis=1)
+    # print(result_matrix_T)
+    # print(result_matrix_Y)
+    return (result_matrix_T, result_matrix_Y)

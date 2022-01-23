@@ -335,7 +335,7 @@
   <!-- Frame for gripper point -->
   <link name="gripper_link"/>
   <joint name="tool0-gripper_link_fixed_joint" type="fixed">
-    <origin rpy="0 0 0" xyz="0 0.0 0.0"/>
+    <origin rpy="0 0 0" xyz="0 0.0 0.155"/>
     <parent link="tool0"/>
     <child link="gripper_link"/>
   </joint>
@@ -345,7 +345,7 @@
     <parent link="world"/>
     <child link="base_link"/>
     <!-- It's callibrated data -->
-    <origin rpy="0 0 -3.14159265359" xyz="0.1029 -1.0467 -0.0910"/>
+    <origin rpy="-0.0043 -0.0153 -3.0625" xyz="0.1029 -1.0467 -0.0910"/>
   </joint>
 </robot>
 

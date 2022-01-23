@@ -8,3 +8,4 @@ urdf-parser-py
 spatialmath-python
 sympy
 pandas
+roboticstoolbox-python
