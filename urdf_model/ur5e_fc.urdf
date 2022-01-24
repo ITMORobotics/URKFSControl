@@ -332,6 +332,20 @@
     <child link="tool0"/>
   </joint>
 
+  <link name="gripper"/>
+  <joint name="tool0-gripper_fixed_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0.182697"/>
+    <parent link="tool0"/>
+    <child link="gripper"/>
+  </joint>
+  
+  <link name="obj"/>
+  <joint name="gripper-obj_fixed_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0.05325"/>
+    <parent link="gripper"/>
+    <child link="obj"/>
+  </joint>
+
   <!-- Frame for gripper point -->
   <link name="gripper_link"/>
   <joint name="tool0-gripper_link_fixed_joint" type="fixed">
