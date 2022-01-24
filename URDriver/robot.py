@@ -15,6 +15,15 @@ from kdl_parser.kdl_parser_py.kdl_parser_py import urdf
 
 class UniversalRobot:
 
+    """
+    Class contains rtde communication functions and robot state:
+        - joint angles
+        - joint velocities
+        - joint currents
+        - joint torques
+        - actual TCP force
+    """
+
     def __init__(self, ip: str):
         self.__ip_addr = ip
         self.__is_ok = False
@@ -50,17 +59,23 @@ class UniversalRobot:
         self.__state.f      = np.array(self.__receive.getActualTCPForce())
 
 class RobotModel:
+
+    """
+    Class wraps python KDL bindings
+    """
+
     def __init__(self, urdf_filename: str, base_link: str, tool_link: str):
-        urdf_file = open(urdf_filename, 'r')
-        urdf_str = urdf_file.read()
-        urdf_file.close()
+        with open(urdf_filename, 'r', encoding='utf-8') as urdf_file:
+            urdf_str = urdf_file.read()
+
         # Generate kinematic model for orocos_kdl
         (ok, self.__tree) = urdf.treeFromString(urdf_str)
-        
+
         if not ok:
             raise RuntimeError('Tree is not valid')
         self.__chain = self.__tree.getChain(base_link, tool_link)
         logging.info('Created chain for robot model: %s', self.__chain)
+        self.__num_of_joints = self.__chain.getNrOfJoints()
 
         self.__fk_posesolver    = kdl.ChainFkSolverPos_recursive(self.__chain)
         self.__fk_velsolver     = kdl.ChainFkSolverVel_recursive(self.__chain)
@@ -69,31 +84,30 @@ class RobotModel:
 
         self.__jacsolver        = kdl.ChainJntToJacSolver(self.__chain)
         self.__djacsolver       = kdl.ChainJntToJacDotSolver(self.__chain)
-        
+
+        self.__jacobian = kdl.Jacobian(self.__num_of_joints)
+        self.__ee_frame = kdl.Frame()
+        self.__vel_frame = kdl.FrameVel()
+
     def jacobian(self, q: np.ndarray) -> np.ndarray:
-        jac = kdl.Jacobian(q.shape[0])
-        self.__jacsolver.JntToJac(to_jnt_array(q), jac)
-        return to_np_matrix(jac, q.shape[0])
-    
+        self.__jacsolver.JntToJac(to_jnt_array(q), self.__jacobian)
+        return to_np_matrix(self.__jacobian, q.shape[0])
+
     def pose_angvec(self, q: np.ndarray) -> np.ndarray:
-        end_frame = kdl.Frame()
-        T = self.__fk_posesolver.JntToCart(to_jnt_array(q), end_frame)
-        p = to_np_matrix(end_frame.p,3)
-        rot = to_np_matrix(kdl.Rotation(end_frame.M), 3)
+        T = self.__fk_posesolver.JntToCart(to_jnt_array(q), self.__ee_frame)
+        p = to_np_matrix(self.__ee_frame.p, 3)
+        rot = to_np_matrix(kdl.Rotation(self.__ee_frame.M), 3)
         angvec = spmb.tr2angvec(rot, unit='rad', check=False)
         return (p, angvec)
-    
+
     def rot(self, q: np.ndarray) -> np.ndarray:
-        end_frame = kdl.Frame()
-        T = self.__fk_posesolver.JntToCart(to_jnt_array(q), end_frame)
-        rot = to_np_matrix(kdl.Rotation(end_frame.M), 3)
+        T = self.__fk_posesolver.JntToCart(to_jnt_array(q), self.__ee_frame)
+        rot = to_np_matrix(kdl.Rotation(self.__ee_frame.M), 3)
         return rot
-    
-    
+
     def twist(self, q: np.ndarray, dq: np.ndarray) -> np.ndarray:
-        vel_frame = kdl.FrameVel()
-        self.__fk_velsolver.JntToCart(to_jnt_array_vel(q, dq), vel_frame)
-        return to_np_matrix(vel_frame.GetTwist(),6)
+        self.__fk_velsolver.JntToCart(to_jnt_array_vel(q, dq), self.__vel_frame)
+        return to_np_matrix(self.__vel_frame.GetTwist(), 6)
 
 
 def to_np_matrix(kdl_data, size: int) -> np.ndarray:
@@ -114,14 +128,14 @@ def to_np_matrix(kdl_data, size: int) -> np.ndarray:
             out[i] = kdl_data[i]
         return out
 
-def to_jnt_array(np_vector: np.ndarray)-> kdl.JntArray:
+def to_jnt_array(np_vector: np.ndarray) -> kdl.JntArray:
     size = np_vector.shape[0]
     ja = kdl.JntArray(size)
     for i in range(0, size):
         ja[i] = np_vector[i]
     return ja
 
-def to_jnt_array_vel(q: np.ndarray, dq:np.ndarray)-> kdl.JntArrayVel:
+def to_jnt_array_vel(q: np.ndarray, dq:np.ndarray) -> kdl.JntArrayVel:
     size = q.shape[0]
     jav = kdl.JntArrayVel(size)
     jav.q = to_jnt_array(q)
@@ -137,7 +151,7 @@ def quaternioun(matrix: np.ndarray) -> np.ndarray:
 #     for i in range(0, size):
 #         ja[i] = np_matrix[i]
 #     return ja
-    
+
 
 # def Ta(theta, psi):
 #     c_psi = cos(psi)

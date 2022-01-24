@@ -1,2 +1,2 @@
-from .robot import UniversalRobot
+from .robot import UniversalRobot, RobotModel
 from .state import RobotState
