@@ -1,3 +1,6 @@
 [submodule "kdl_parser"]
 	path = kdl_parser
 	url = git@github.com:ros/kdl_parser.git
+[submodule "gripper_controller"]
+	path = gripper_controller
+	url = git@github.com:ITMORobotics/gripper_controller.git
