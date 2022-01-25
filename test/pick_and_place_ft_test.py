@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
+from glob import glob
 import sys
 import os
 import time
-from tkinter.tix import Tree
-from zlib import Z_TREES
+import spatialmath as spm
+import spatialmath.base as spmb
 import PyKDL
 import rospy
 
@@ -18,6 +19,7 @@ import numpy as np
 from geometry_msgs.msg import WrenchStamped
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Header
+from geometry_msgs.msg import Pose
 import median_filter as md
 
 from gripper_pkg.srv import control
@@ -42,6 +44,14 @@ R_Z     = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
 Z_A     = np.array([0, 0, 1, 0, 0, 0])
 
 Z_TR    = 0.28
+# CAMERA_TRANSFORM = spm.SE3(-0.0305, -0.10218, 0.03445)
+CAMERA_TRANSFORM = np.array([-0.0305, -0.10218, 0.03445])
+
+# Stages
+# 0 -- touch
+# 1 -- search
+# 2 -- insert
+STAGE = 0
 
 np.set_printoptions(precision=4, suppress=True)
 
@@ -70,8 +80,8 @@ def sign(val: float) -> float:
 def down_direct_force_control(force: np.ndarray, z_force) -> np.ndarray:
     # Coefficients
     max_speed = 0.001
-    kf = 0.005
-    ktau = 0.05
+    kf = 0.05
+    ktau = 0.005
     vel = np.zeros(6)
     k_p = -0.0001
     k_i = -0.00001
@@ -104,9 +114,120 @@ def down_direct_force_control(force: np.ndarray, z_force) -> np.ndarray:
     vel[0] = kf*deadzone(force[0], 3)
     vel[1] = kf*deadzone(force[1], 3)
     vel[2] = sum_f + sum_d + dirv[2]
-    vel[3] = ktau*deadzone(force[3], 0.02)
-    vel[4] = ktau*deadzone(force[4], 0.02)
+    vel[3] = -ktau*deadzone(force[3], 0.02)
+    vel[4] = -ktau*deadzone(force[4], 0.02)
     vel[5] = ktau*deadzone(force[5], 0.02)
+
+    return vel
+
+def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) -> np.ndarray:
+    # Coefficients
+    max_speed = 0.001
+    kf = 0.01
+    ktau = 0.1
+    vel = np.zeros(6)
+    f_dzone = np.zeros(6)
+    k_p = -0.0001
+    k_i = -0.00001
+    k_d = -0.00001
+
+    if not hasattr(down_odirect_force_control, 'integral'):
+        down_odirect_force_control.integral_time = time.time()
+        down_odirect_force_control.integral = 0
+        down_odirect_force_control.last_err = 0
+
+    # time
+    i_new_time = time.time()
+    delta_t = i_new_time - down_odirect_force_control.integral_time
+    down_odirect_force_control.integral_time = i_new_time
+
+    f_6 = rot_6_0.T.dot(force[:3])
+    t_6 = rot_6_0.T.dot(force[3:])
+
+    data = np.zeros(6)
+    data[:3] = force[:3]
+    data[3:] = t_6
+    send_wrench(data)
+
+    # error
+    goal = -z_force
+    err_f = goal - f_6[2]
+    derr_f = (err_f - down_odirect_force_control.last_err)/delta_t
+    down_odirect_force_control.last_err = err_f
+
+    # PID
+    sum_f = k_p*err_f
+    sum_f = sum_f if abs(sum_f) < max_speed else max_speed * sign(float(sum_f))
+    sum_d = k_d*derr_f
+    down_odirect_force_control.integral += k_i* delta_t * err_f
+
+    dirv = -DIR_F if abs(f_6[2]) < 10 else DIR_F*0
+
+    f_6[0] = kf*deadzone(f_6[0], 3)
+    f_6[1] = kf*deadzone(f_6[1], 3)
+    f_6[2] = sum_f + sum_d + dirv[2]
+    t_6[0] = ktau*deadzone(t_6[0], 0.04)
+    t_6[1] = ktau*deadzone(t_6[1], 0.04)
+    t_6[2] = ktau*deadzone(t_6[2], 0.04)
+    vel[:3] = rot_6_0.dot(f_6)
+    vel[3:] = rot_6_0.dot(t_6)
+
+    print('err', err_f, derr_f)
+
+    return vel
+
+def find_object_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) -> np.ndarray:
+
+    global STAGE
+
+    # Coefficients
+    max_speed = 0.001
+    kf = 0.01
+    ktau = 0.01
+    vel = np.zeros(6)
+    f_dzone = np.zeros(6)
+    k_p = -0.0001
+    k_i = -0.00001
+    k_d = -0.00001
+
+    if not hasattr(down_odirect_force_control, 'integral'):
+        down_odirect_force_control.integral_time = time.time()
+        down_odirect_force_control.integral = 0
+        down_odirect_force_control.last_err = 0
+
+    # time
+    i_new_time = time.time()
+    delta_t = i_new_time - down_odirect_force_control.integral_time
+    down_odirect_force_control.integral_time = i_new_time
+
+    f_6 = rot_6_0.T.dot(force[:3])
+
+    data = np.zeros(6)
+    data[:3] = force[:3]
+    send_wrench(data)
+
+    # error
+    goal = -z_force
+    err_f = goal - f_6[2]
+    derr_f = (err_f - down_odirect_force_control.last_err)/delta_t
+    down_odirect_force_control.last_err = err_f
+
+    # PID
+    sum_f = k_p*err_f
+    sum_f = sum_f if abs(sum_f) < max_speed else max_speed * sign(float(sum_f))
+    sum_d = k_d*derr_f
+    down_odirect_force_control.integral += k_i* delta_t * err_f
+
+    dirv = -DIR_F if abs(f_6[2]) < 10 else DIR_F*0
+
+    f_6[0] = 0
+    f_6[1] = 0
+    f_6[2] = sum_f + sum_d + dirv[2]
+    vel[:3] = rot_6_0.dot(f_6)
+
+    # print('err', err_f, derr_f)
+    if np.abs(err_f) < 1:
+        STAGE = 2
 
     return vel
 
@@ -121,6 +242,7 @@ def pick_object(robot: URDriver.UniversalRobot) -> None:
     time.sleep(0.5)
 
 def place_object(robot: URDriver.UniversalRobot) -> None:
+    close_gripper()
     robot.control.moveL(PLACE_P + Z_A*0.4)
     time.sleep(0.5)
     robot.control.moveL(PLACE_P + Z_A*0.27)
@@ -159,6 +281,8 @@ def free_gripper():
 
 def main():
 
+    global PLACE_P
+
     # Initialize median filter
     median = md.MedianFilter(NUM_JOINTS, 5)
 
@@ -174,13 +298,28 @@ def main():
 
     # Move to initial position
     robot1.control.moveJ(JOINTS)
+    time.sleep(5)
 
     # Reset force sensor
     robot1.control.zeroFtSensor()
     robot1.update_state()
 
+
+    circ_msg = rospy.wait_for_message('/circle_pose', Pose, timeout=None)
+    print(circ_msg)
+
+    circ_p = np.array([circ_msg.position.x, circ_msg.position.y, 0, 1])
+    p_6, _ = robot_model.pose_angvec(robot1.state.q)
+    r_6    = robot_model.rot(robot1.state.q)
+    transform_6_0 = spm.SE3(*p_6) @ spm.SE3(spmb.r2t(r_6, check=True))
+    transform_camera = transform_6_0 @ spm.SE3(-0.0305, -0.10218, 0.03445)
+    circ_p = transform_camera.A.dot(circ_p)
+    PLACE_P[0] = circ_p[0]
+    PLACE_P[1] = circ_p[1]
+
+
     # Pick and place object
-    pick_object(robot1)
+    # pick_object(robot1)
     place_object(robot1)
 
     # Reset force sensor
@@ -198,26 +337,27 @@ def main():
         # state
         robot1.update_state()
         send_joint_states(robot1.state.q)
-        send_wrench(robot1.state.f)
-
-        # get end effector transform
-        p, angvec = robot_model.pose_angvec(robot1.state.q)
-        z1 = z0
-        z0 = p[2]
-        dz = z0 - z1
-        # print('z', z0, dz)
 
         # Use medial filter to get forces
         fe = np.array(median.apply_median(robot1.state.f)).flatten()
         jac = robot_model.jacobian(robot1.state.q)
 
-        # control
-        fdir = down_direct_force_control(fe, 20)
+        # send_wrench(robot1.state.f)
+        rot_6_0 = robot_model.rot(robot1.state.q)
 
-        if z0 > Z_TR and dz < 0:
-            print
-            # print('START REG')
-        # fdir = direct_force_control(fe)
+        # Control
+        if STAGE == 0:
+            print('STAGE:', STAGE)
+            fdir = find_object_force_control(fe, 20, rot_6_0)
+
+        if STAGE == 1:
+            pass
+
+        if STAGE == 2:
+            print('STAGE:', STAGE)
+            fdir = down_odirect_force_control(fe, 30, rot_6_0)
+
+
 
         # Calculate speed vector using Manipulator Jacobian
         jspeed = np.linalg.pinv(jac).dot(fdir)
@@ -235,16 +375,14 @@ def main():
             break
 
 
-
 if __name__ == '__main__':
 
     current_filepath = os.path.dirname(os.path.abspath(__file__))
-    urdf_filepath = os.path.join(current_filepath, '..', 'urdf_model', 'ur5e.urdf')
+    urdf_filepath = os.path.join(current_filepath, '..', 'urdf_model', 'ur5e_fc.urdf')
 
     # ROS
-    rospy.init_node('node_name')
-    urdf_description = rospy.get_param('/robot_description')
-    robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'tool0')
+    rospy.init_node('pick_and_place_node')
+    robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'obj')
 
     # Publishers
     js_publisher = rospy.Publisher('/joint_states', JointState, queue_size=10)
