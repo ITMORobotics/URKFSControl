@@ -150,3 +150,4 @@ class CooperativeController():
             control_dq = np.linalg.pinv(self.__coop_model.abs_rel_jacobian((q1,q2))) @ (target_move_twist)
             # print("Control dq: \n", control_dq)
         return control_dq
+

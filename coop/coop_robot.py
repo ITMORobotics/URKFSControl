@@ -59,6 +59,29 @@ class DualUniversalRobot(UniversalRobot):
         self.__robots[0].__del__()
         self.__robots[1].__del__()
 
+class CoopCartState():
+    def __init__(self):
+        self.__rel_tf = None
+        self.__abs_tf = None
+    
+    def build_from_SE3(self, abs_tf: SE3, rel_tf: SE3):
+        self.__abs_tf = abs_tf
+        self.__rel_tf = rel_tf
+    
+    def build_from_matrices(self, abs_tf: np.ndarray, rel_tf: np.ndarray):
+        self.__abs_tf = SE3(abs_tf, check=False)
+        self.__rel_tf = SE3(rel_tf, check=False)
+        
+    def to_matrices(self) -> Tuple[np.ndarray]:
+        return self.__rel_tf.A, self.__abs_tf.A
+    
+    @property
+    def rel_tf(self):
+        return self.__rel_tf
+    
+    @property
+    def abs_tf(self):
+        return self.__abs_tf
 
 class DualCoopModel:
     def __init__(self, coop_models: Tuple[RobotModel]):
@@ -86,15 +109,6 @@ class DualCoopModel:
 
     def absolute_orient(self, q_tuple:Tuple[np.ndarray]) -> np.ndarray:
         rot_left = self.__coop_model[0].rot(q_tuple[0])
-        # rot_right = self.__coop_model[1].rot(q_tuple[1])
-        # rot_relative = rot_right @ rot_left.T
-        # angvec_relative = list(spmb.tr2angvec(rot_relative, unit='rad', check=False))
-        # # print(angvec_relative)
-        # angvec_relative[0] /= 2.0
-        # # print(angvec_relative)
-        # half_rot_relative = spmb.angvec2r(angvec_relative[0], angvec_relative[1])
-
-        # rot_abs = rot_left @ half_rot_relative
         rot_abs = rot_left 
         return rot_abs
     
@@ -124,18 +138,21 @@ class DualCoopModel:
     def abs_rel_force(self, ft:Tuple[np.ndarray]) -> np.ndarray:
         return np.concatenate((self.absolute_force(ft), self.relative_force(ft)), axis=0)
 
+    def cart_state(self, q_tuple:Tuple[np.ndarray]) -> CoopCartState:
+        state = CoopCartState()
+        pose_abs = self.absolute_pose(q_tuple)
+        pose_rel = self.relative_pose(q_tuple)
+        rot_abs = self.absolute_orient(q_tuple)
+        rot_rel = self.relative_orient(q_tuple)
+        
+        frame_abs = SE3(pose_abs[0], pose_abs[1], pose_abs[2]) @ SE3(rot_abs, check=False)
+        frame_rel = SE3(pose_rel[0], pose_rel[1], pose_rel[2]) @ SE3(rot_rel, check=False)
+        state.build_from_SE3(frame_abs, frame_rel)
+        return state
+
     @property
     def size(self):
         return self.__size
-
-class CoopCartState():
-    def __init__(self):
-        self.__rel_tf = None
-        self.__abs_tf = None
-    
-    def from_matrices(self, rel_tf: np.ndarray, abs_tf: np.ndarray):
-        self.__rel_tf = SE3(rel_tf, check=False)
-        self.__rel_tf = SE3(abs_tf, check=False)
     
 class SE3LineTrj():
     def __init__(self, init_frame: SE3, finish_frame: SE3, dt: float, finish_time: float):
@@ -143,7 +160,7 @@ class SE3LineTrj():
         self.__finish_frame = finish_frame
         self.__dt = dt
         self.__finish_time = finish_time
-        self.__trj = roboticstoolbox.tools.trajectory.ctraj(self.__init_frame, self.__finish_frame, t=finish_time)
+        self.__trj = roboticstoolbox.tools.trajectory.ctraj(self.__init_frame, self.__finish_frame, t=np.arange(0, self.__finish_time, self.__dt))
     
     def getSE3(self, t: float) -> SE3:
         if t<=0:
@@ -152,6 +169,16 @@ class SE3LineTrj():
             return self.__finish_frame
         else:
             return self.__trj[int(t/self.__dt)]
+
+class CoopSE3LineTrj():
+    def __init__(self, start_coop_state: CoopCartState, finish_coop_state: CoopCartState, dt: float, finish_time: float):
+        self.__abs_trj = SE3LineTrj(start_coop_state.abs_tf, finish_coop_state.abs_tf, dt, finish_time)
+        self.__rel_trj = SE3LineTrj(start_coop_state.rel_tf, finish_coop_state.rel_tf, dt, finish_time)
+    
+    def getState(self, time: float) -> CoopCartState:
+        trj_state = CoopCartState()
+        trj_state.build_from_SE3(self.__abs_trj.getSE3(time), self.__rel_trj.getSE3(time))
+        return trj_state
 
 def generate_simple_selection_matrix(allow_moves: np.ndarray) ->Tuple[np.ndarray, np.ndarray]:
     
@@ -180,6 +207,4 @@ def generate_simple_selection_matrix(allow_moves: np.ndarray) ->Tuple[np.ndarray
         result_matrix_Y = None
     else:
         result_matrix_Y = np.concatenate(Y_list, axis=1)
-    # print(result_matrix_T)
-    # print(result_matrix_Y)
     return (result_matrix_T, result_matrix_Y)

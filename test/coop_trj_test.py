@@ -25,8 +25,8 @@ target_coop_rel_orient = R.from_euler('z', 0, degrees=False).as_matrix()
 target_coop_abs_pose = np.array([-0.3, -0.5, 0.4])
 target_coop_abs_orient = R.from_euler('x', np.pi, degrees=False).as_matrix()
 
-coop_state2 = coop_robot.CoopCartState()
-coop_state2.build_from_SE3(SE3(-0.3, -0.5, 0.5) @ SE3.Rx(np.pi, 'rad'), SE3(0.0, -0.3, 0.0) @ SE3.Rz(0.0, 'rad'))
+coop_state_to = coop_robot.CoopCartState()
+coop_state_to.build_from_SE3(SE3(-0.3, -0.5, 0.5) @ SE3.Rx(np.pi, 'rad'), SE3(0.0, -0.3, 0.0) @ SE3.Rz(0.0, 'rad'))
 
 
 coop_P_matrix = scipy.linalg.block_diag(np.identity(3)*0.7, np.identity(3)*0.3)
@@ -54,7 +54,9 @@ def main():
         raise(RuntimeError('Force torque connection was broken'))
 
     start_time = time.time()
-    coop_state_curent = coop_robot.CoopCartState()
+    coop_ur.update_state()
+    coop_cart_state_init = coop_model.cart_state((coop_ur.state[0].q, coop_ur.state[1].q))
+    trj = coop_robot.CoopSE3LineTrj(coop_cart_state_init, coop_state_to, dt, 15.0)
 
     while time.time()-start_time < 50.0:
         start_loop_time = time.time()
@@ -78,7 +80,7 @@ def main():
         #     full_control_sM[0], full_control_sM[1])
 
         # Send dq control to two robots
-        coop_ur.send_dq(control_dq)
+        # coop_ur.send_dq(control_dq)
 
         end_loop_time = time.time()
         duration = end_loop_time - start_loop_time
