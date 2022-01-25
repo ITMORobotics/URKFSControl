@@ -1,3 +1,4 @@
+pyserial
 pybind11
 numpy
 scipy
