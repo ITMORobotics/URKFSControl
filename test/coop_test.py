@@ -25,15 +25,15 @@ target_coop_rel_orient = R.from_euler('z', 0, degrees=False).as_matrix()
 target_coop_abs_pose = np.array([-0.3, -0.5, 0.4])
 target_coop_abs_orient = R.from_euler('x', np.pi, degrees=False).as_matrix()
 
-coop_state2 = coop_robot.CoopCartState()
-coop_state2.build_from_SE3(SE3(-0.3, -0.5, 0.5) @ SE3.Rx(np.pi, 'rad'), SE3(0.0, -0.3, 0.0) @ SE3.Rz(0.0, 'rad'))
+coop_state_to = coop_robot.CoopCartState()
+coop_state_to.build_from_SE3(SE3(-0.15, -0.5, 0.35) @ SE3.Rx(np.pi, 'rad'), SE3(0.0, -0.3, 0.0) @ SE3.Rz(0.0, 'rad'))
 
 
 coop_P_matrix = scipy.linalg.block_diag(np.identity(3)*0.7, np.identity(3)*0.3)
 coop_I_matrix = scipy.linalg.block_diag(np.identity(3)*0.01, np.identity(3)*0.05)
 
-coop_P_matrix_full = scipy.linalg.block_diag(np.identity(3)*0.7, np.identity(3)*0.3, np.identity(3)*0.7, np.identity(3)*0.3)*1
-coop_I_matrix_full = scipy.linalg.block_diag(np.identity(3)*0.01, np.identity(3)*0.05, np.identity(3)*0.01, np.identity(3)*0.05)
+coop_P_matrix_full = scipy.linalg.block_diag(np.identity(3)*0.7, np.identity(3)*0.3, np.identity(3)*0.7, np.identity(3)*0.3)*1.0
+coop_I_matrix_full = scipy.linalg.block_diag(np.identity(3)*0.01, np.identity(3)*0.01, np.identity(3)*0.01, np.identity(3)*0.01)*1.2
 
 coop_stiff_matrix = scipy.linalg.block_diag(np.identity(3)*0.005, np.identity(3)*0.05)
 
@@ -54,30 +54,35 @@ def main():
         raise(RuntimeError('Force torque connection was broken'))
 
     start_time = time.time()
-    coop_state_curent = coop_robot.CoopCartState()
+
+    coop_ur.update_state()
+    coop_state_from = coop_model.cart_state((coop_ur.state[0].q, coop_ur.state[1].q))
 
     while time.time()-start_time < 50.0:
         start_loop_time = time.time()
         coop_ur.update_state()
+        coop_state_from = coop_model.cart_state((coop_ur.state[0].q, coop_ur.state[1].q))
 
-        control_dq = coop_controller.world_stiff_control(
-            target_coop_rel_pose,
-            target_coop_rel_orient,
-            target_coop_abs_ft,
-            (coop_ur.state[0].q, coop_ur.state[1].q),
-            (coop_ur.state[0].f, coop_ur.state[1].f),
-            external_stiff_sM[0], external_stiff_sM[1])
-
-        # control_dq = coop_full_controller.world_rigid_control(
-        #     target_coop_abs_pose,
-        #     target_coop_abs_orient,
+        # control_dq = coop_controller.world_stiff_control(
         #     target_coop_rel_pose,
         #     target_coop_rel_orient,
+        #     target_coop_abs_ft,
         #     (coop_ur.state[0].q, coop_ur.state[1].q),
         #     (coop_ur.state[0].f, coop_ur.state[1].f),
-        #     full_control_sM[0], full_control_sM[1])
+        #     external_stiff_sM[0], external_stiff_sM[1])
+
+        target_coop_abs_pose1, target_coop_abs_orient1, target_coop_rel_pose1, target_coop_rel_orient1 = coop_state_to.to_pose_rot()
+        control_dq = coop_full_controller.world_rigid_control(
+            target_coop_abs_pose1,
+            target_coop_abs_orient1,
+            target_coop_rel_pose1,
+            target_coop_rel_orient1,
+            (coop_ur.state[0].q, coop_ur.state[1].q),
+            (coop_ur.state[0].f, coop_ur.state[1].f),
+            full_control_sM[0], full_control_sM[1])
 
         # Send dq control to two robots
+        print(control_dq)
         coop_ur.send_dq(control_dq)
 
         end_loop_time = time.time()

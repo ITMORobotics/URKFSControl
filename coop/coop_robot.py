@@ -7,7 +7,7 @@ from rtde_control import RTDEControlInterface
 from rtde_receive import RTDEReceiveInterface
 
 import spatialmath.base as spmb
-from spatialmath import SE3
+from spatialmath import SE3, SO3
 import roboticstoolbox
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -52,8 +52,8 @@ class DualUniversalRobot(UniversalRobot):
     def stop(self):
         self.__robots[0].control.speedStop()
         self.__robots[1].control.speedStop()
-        self.__robots[0].control.stopScript()
-        self.__robots[1].control.stopScript()
+        # self.__robots[0].control.stopScript()
+        # self.__robots[1].control.stopScript()
 
     def __del__(self):
         self.__robots[0].__del__()
@@ -74,6 +74,9 @@ class CoopCartState():
         
     def to_matrices(self) -> Tuple[np.ndarray]:
         return self.__rel_tf.A, self.__abs_tf.A
+
+    def to_pose_rot(self) -> Tuple[np.ndarray]:
+        return (self.__abs_tf.t, self.__abs_tf.R, self.__rel_tf.t, self.__rel_tf.R)
     
     @property
     def rel_tf(self):
@@ -141,12 +144,13 @@ class DualCoopModel:
     def cart_state(self, q_tuple:Tuple[np.ndarray]) -> CoopCartState:
         state = CoopCartState()
         pose_abs = self.absolute_pose(q_tuple)
-        pose_rel = self.relative_pose(q_tuple)
         rot_abs = self.absolute_orient(q_tuple)
+        pose_rel = rot_abs.T @ self.relative_pose(q_tuple)
         rot_rel = self.relative_orient(q_tuple)
         
-        frame_abs = SE3(pose_abs[0], pose_abs[1], pose_abs[2]) @ SE3(rot_abs, check=False)
-        frame_rel = SE3(pose_rel[0], pose_rel[1], pose_rel[2]) @ SE3(rot_rel, check=False)
+        frame_abs = SE3(pose_abs[0], pose_abs[1], pose_abs[2]) @ SE3(SO3(trnorm(rot_abs)))
+        frame_rel = SE3(pose_rel[0], pose_rel[1], pose_rel[2]) @ SE3(SO3(trnorm(rot_rel)))
+        # print(frame_rel)
         state.build_from_SE3(frame_abs, frame_rel)
         return state
 
@@ -160,15 +164,20 @@ class SE3LineTrj():
         self.__finish_frame = finish_frame
         self.__dt = dt
         self.__finish_time = finish_time
-        self.__trj = roboticstoolbox.tools.trajectory.ctraj(self.__init_frame, self.__finish_frame, t=np.arange(0, self.__finish_time, self.__dt))
+        self.__trj = roboticstoolbox.tools.trajectory.ctraj(self.__init_frame, self.__finish_frame, int(self.__finish_time/self.__dt))
     
     def getSE3(self, t: float) -> SE3:
-        if t<=0:
+        index = int(t/self.__dt)
+        if index<=0:
             return self.__init_frame
-        if t>=self.__finish_time:
+        elif index>=(self.__finish_time/self.__dt):
             return self.__finish_frame
         else:
-            return self.__trj[int(t/self.__dt)]
+            while True:
+                if(not self.__trj[index].t.any()):
+                    index-=1
+                else:
+                    return self.__trj[index]
 
 class CoopSE3LineTrj():
     def __init__(self, start_coop_state: CoopCartState, finish_coop_state: CoopCartState, dt: float, finish_time: float):
@@ -178,6 +187,7 @@ class CoopSE3LineTrj():
     def getState(self, time: float) -> CoopCartState:
         trj_state = CoopCartState()
         trj_state.build_from_SE3(self.__abs_trj.getSE3(time), self.__rel_trj.getSE3(time))
+        # print(trj_state.rel_tf)
         return trj_state
 
 def generate_simple_selection_matrix(allow_moves: np.ndarray) ->Tuple[np.ndarray, np.ndarray]:

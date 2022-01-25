@@ -20,7 +20,7 @@ class MPIController():
         self.__wind_up_max = np.ones(self.__I.shape[0])*0.8
     
     def reset(self):
-        self.__integral_value = np.zeros(self.__I.shape)
+        self.__integral_value = np.zeros(self.__I.shape[0])
     
     def u(self, err: np.ndarray):
         if err.shape[0] != self.__P.shape[0]:
@@ -48,7 +48,9 @@ class CooperativeController():
         self.__coop_stiff_matrix = coop_stiff_matrix
         self.__coop_model = coop_model
         self.__pi_control = MPIController(self.__coop_P_matrix, self.__coop_I_matrix, dt)
-        
+    
+    def reset(self):
+        self.__pi_control.reset()
 
     def world_stiff_control(self,
         target_coop_rel_pose: np.ndarray,
@@ -118,7 +120,7 @@ class CooperativeController():
         rel_rot = self.__coop_model.relative_orient((q1,q2))
 
         block_rot = scipy.linalg.block_diag(block_abs_rot, abs_rot, np.identity(3))
-
+        # print("Current pose: \n", self.__coop_model.relative_pose((q1,q2)))
         # Calculating absolute  errors for  pose and orientation
         abs_pose_error = target_coop_abs_pose - self.__coop_model.absolute_pose((q1,q2))
         abs_orient_error = target_coop_abs_orient @ abs_rot.T
@@ -132,8 +134,7 @@ class CooperativeController():
 
         rel_orient_error_tf = SE3(rel_pose_error) @ SE3(SO3(rel_orient_error, check=False))
         rel_orient_twist_error = rel_orient_error_tf.twist().A[3:]
-
-        print(abs_orient_twist_error)
+        # print(rel_pose_error)
 
         error_move_coop = np.concatenate((abs_pose_error, abs_orient_twist_error, rel_pose_error, rel_orient_twist_error), axis=0)
 
