@@ -31,6 +31,7 @@ TOOL = 'tool0'
 NUM_JOINTS = 6
 
 
+
 JOINTS  = np.array([np.pi/2, -np.pi/2 + np.pi/6 - 0.2, -np.pi/2, -np.pi/2 - np.pi/6 + 0.2, np.pi/2, 0])
 PICK_P  = np.array([-0.4, 0, 0.216, np.pi, 0, 0])
 # PLACE_P = np.array([0.085, 0.429, 0.0481, np.pi, 0, 0])
@@ -110,7 +111,11 @@ def send_wrench(f: np.ndarray):
     wrench.wrench.torque.z  = f[5]
     wr_publisher.publish(wrench)
 
+def load_regressor(q: np.ndarray, rot_6_0: np.ndarray) -> np.ndarray:
+    pass
 
+def load_parameters_estimation(f: np.ndarray, regr: np.ndarray) -> np.ndarray:
+    pass
 
 def main():
 
@@ -159,9 +164,6 @@ def main():
     robot1.update_state()
 
     fdir = DIR
-    z0 = 0
-    z1 = 0
-    dz = 0
 
     while True:
         start = time.time()
