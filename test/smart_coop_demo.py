@@ -22,6 +22,8 @@ coop_state2.build_from_SE3(SE3(0.15, -0.5, 0.5) @ SE3.Rx(-np.pi+0.1, 'rad'), SE3
 
 def main():
     coop_system = executor.CoopSmartSystem('192.168.88.5', '192.168.88.6', 'urdf_model/ur5e_left.urdf', 'urdf_model/ur5e_right.urdf', 'tool0')
+    print("Abs: \n", coop_system.get_state().abs_tf)
+    print("Rel: \n", coop_system.get_state().rel_tf)
     # coop_system.p2p_cartmove_avoid(coop_state1, 5.0, False)
     # time.sleep(2.0)
     # coop_system.p2p_cartmove_avoid(coop_state2, 5.0, False)
