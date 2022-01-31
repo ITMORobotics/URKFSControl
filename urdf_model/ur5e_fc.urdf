@@ -16,7 +16,7 @@
       <timeout>5</timeout>
       <powerStateTopic>power_state</powerStateTopic>
       <powerStateRate>10.0</powerStateRate>
-      <fullChargeCapacity>87.78</fullChargeCapacity>     
+      <fullChargeCapacity>87.78</fullChargeCapacity>
       <dischargeRate>-474</dischargeRate>
       <chargeRate>525</chargeRate>
       <dischargeVoltage>15.52</dischargeVoltage>
@@ -338,13 +338,21 @@
     <parent link="tool0"/>
     <child link="gripper"/>
   </joint>
-  
+
   <link name="obj"/>
   <joint name="gripper-obj_fixed_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0.05325"/>
     <parent link="gripper"/>
     <child link="obj"/>
   </joint>
+
+  <link name="rigid_gripper">
+  <joint name="tool0-rigid-gripper-fixed-joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0.1126"/>
+    <parent link="tool0"/>
+    <child link="rigid_gripper"/>
+  </joint>
+
 
   <!-- Frame for gripper point -->
   <link name="gripper_link"/>
@@ -361,4 +369,3 @@
     <origin rpy="0.0 0.0 -3.14159265359" xyz="0.0 0.0 0.0"/>
   </joint>
 </robot>
-
