@@ -6,6 +6,9 @@ from typing import Tuple
 from rtde_control import RTDEControlInterface
 from rtde_receive import RTDEReceiveInterface
 
+from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp
+
 import spatialmath.base as spmb
 from spatialmath import SE3, SO3
 import roboticstoolbox
@@ -61,8 +64,8 @@ class DualUniversalRobot(UniversalRobot):
 
 class CoopCartState():
     def __init__(self):
-        self.__rel_tf = None
         self.__abs_tf = None
+        self.__rel_tf = None
     
     def build_from_SE3(self, abs_tf: SE3, rel_tf: SE3):
         self.__abs_tf = abs_tf
@@ -73,7 +76,7 @@ class CoopCartState():
         self.__rel_tf = SE3(rel_tf, check=False)
         
     def to_matrices(self) -> Tuple[np.ndarray]:
-        return self.__rel_tf.A, self.__abs_tf.A
+        return self.__abs_tf.A, self.__rel_tf.A
 
     def to_pose_rot(self) -> Tuple[np.ndarray]:
         return (self.__abs_tf.t, self.__abs_tf.R, self.__rel_tf.t, self.__rel_tf.R)
@@ -164,20 +167,39 @@ class SE3LineTrj():
         self.__finish_frame = finish_frame
         self.__dt = dt
         self.__finish_time = finish_time
-        self.__trj = roboticstoolbox.tools.trajectory.ctraj(self.__init_frame, self.__finish_frame, int(self.__finish_time/self.__dt))
+        self.__N =  int(self.__finish_time/self.__dt)
+
+        key_rots = R.from_matrix(np.array([self.__init_frame.R, self.__finish_frame.R]))
+        key_times = [0, 1]
+        slerp = Slerp(key_times, key_rots)
+        times = list(np.arange(0, 1.0, 1.0/int(self.__finish_time/self.__dt)))
+        # print(times)
+        self.__interp_rots = slerp(times)
+        self.__interp_pose = self.interpLine(self.__init_frame.t, self.__finish_frame.t, self.__N)
+    
+    def interpLine(self, p1: np.array, p2: np.array, N: int)-> list:
+        vectors = []
+        for i in range(0, self.__N):
+            s = i*1.0/N
+            vectors.append((1.0 - s) * p1 + s * p2)
+        return vectors
     
     def getSE3(self, t: float) -> SE3:
         index = int(t/self.__dt)
         if index<=0:
             return self.__init_frame
-        elif index>=(self.__finish_time/self.__dt):
+        elif index>=self.__N:
             return self.__finish_frame
         else:
-            while True:
-                if(not self.__trj[index].t.any()):
-                    index-=1
-                else:
-                    return self.__trj[index]
+            # while True:
+            #     if(not self.__trj[index].t.any()):
+            #         index-=1
+            #     else:
+            vec = self.__interp_pose[index]
+            tfvec = SE3(vec[0], vec[1], vec[2])
+            tf_out = tfvec @ SE3(SO3(self.__interp_rots[index].as_matrix()), check=False)
+            # print(vec)
+            return tf_out
 
 class CoopSE3LineTrj():
     def __init__(self, start_coop_state: CoopCartState, finish_coop_state: CoopCartState, dt: float, finish_time: float):

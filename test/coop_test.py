@@ -26,7 +26,7 @@ target_coop_abs_pose = np.array([-0.3, -0.5, 0.4])
 target_coop_abs_orient = R.from_euler('x', np.pi, degrees=False).as_matrix()
 
 coop_state_to = coop_robot.CoopCartState()
-coop_state_to.build_from_SE3(SE3(-0.15, -0.5, 0.35) @ SE3.Rx(np.pi, 'rad'), SE3(0.0, -0.3, 0.0) @ SE3.Rz(0.0, 'rad'))
+coop_state_to.build_from_SE3(SE3(-0.15, -0.5, 0.35) @ SE3.Ry(0.0, 'rad') @ SE3.Rx(np.pi, 'rad'), SE3(0.0, -0.3, 0.0) @ SE3.Rz(0.0, 'rad'))
 
 
 coop_P_matrix = scipy.linalg.block_diag(np.identity(3)*0.7, np.identity(3)*0.3)

@@ -135,6 +135,7 @@ class CooperativeController():
         rel_orient_error_tf = SE3(rel_pose_error) @ SE3(SO3(rel_orient_error, check=False))
         rel_orient_twist_error = rel_orient_error_tf.twist().A[3:]
         # print(rel_pose_error)
+        print(rel_orient_error_tf )
 
         error_move_coop = np.concatenate((abs_pose_error, abs_orient_twist_error, rel_pose_error, rel_orient_twist_error), axis=0)
 

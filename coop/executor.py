@@ -19,7 +19,7 @@ class CoopSmartSystem():
         self.__coop_P_matrix = scipy.linalg.block_diag(np.identity(3)*0.7, np.identity(3)*0.3)
         self.__coop_I_matrix = scipy.linalg.block_diag(np.identity(3)*0.01, np.identity(3)*0.05)
 
-        self.__coop_P_matrix_full = scipy.linalg.block_diag(np.identity(3)*0.7, np.identity(3)*0.3, np.identity(3)*0.7, np.identity(3)*0.3)*1.0
+        self.__coop_P_matrix_full = scipy.linalg.block_diag(np.identity(3)*0.8, np.identity(3)*0.4, np.identity(3)*0.8, np.identity(3)*0.4)*1.5
         self.__coop_I_matrix_full = scipy.linalg.block_diag(np.identity(3)*0.01, np.identity(3)*0.01, np.identity(3)*0.01, np.identity(3)*0.01)*7.5
 
         self.__coop_stiff_matrix = scipy.linalg.block_diag(np.identity(3)*0.005, np.identity(3)*0.05)
@@ -40,6 +40,11 @@ class CoopSmartSystem():
         ok &= self.__coop_ur.control[1].zeroFtSensor()
         if not ok:
             raise(RuntimeError('Force torque connection was broken'))
+    
+    def get_state(self) -> coop_robot.CoopCartState:
+        self.__coop_ur.update_state()
+        return self.__coop_model.cart_state((self.__coop_ur.state[0].q, self.__coop_ur.state[1].q))
+
 
     def p2p_cartmove_avoid(self, to_state: coop_robot.CoopCartState, final_time: float, stiff_check: bool):
 
@@ -50,6 +55,8 @@ class CoopSmartSystem():
         while True:
             self.__coop_ur.update_state()
             coop_state_from = self.__coop_model.cart_state((self.__coop_ur.state[0].q, self.__coop_ur.state[1].q))
+            print("From tf:\n", coop_state_from.abs_tf)
+            print("To tf:\n", to_state.abs_tf)
             trj = coop_robot.CoopSE3LineTrj(coop_state_from, to_state, self.__dt, final_time)
 
             start_time = time.time()
@@ -59,14 +66,14 @@ class CoopSmartSystem():
             target_coop_rel_pose1 =None
             target_coop_rel_orient1 = None
             print("Continue executing")
-            while time.time()-start_time < final_time + 2.0:
+            while time.time()-start_time < final_time + 5.0:
                 start_loop_time = time.time()
                 self.__coop_ur.update_state()
                 coop_state_from = self.__coop_model.cart_state((self.__coop_ur.state[0].q, self.__coop_ur.state[1].q))
                 trj_state_t = trj.getState(time.time()-start_time)
 
-                # print(trj_state_t.rel_tf)
                 target_coop_abs_pose1, target_coop_abs_orient1, target_coop_rel_pose1, target_coop_rel_orient1 = trj_state_t.to_pose_rot()
+                print(trj_state_t.abs_tf)
                 control_dq = self.__coop_full_controller.world_rigid_control(
                     target_coop_abs_pose1,
                     target_coop_abs_orient1,
@@ -78,7 +85,7 @@ class CoopSmartSystem():
                 )
 
                 # Send dq control to two robots
-                # print(control_dq)
+                print(control_dq)
                 self.__coop_ur.send_dq(control_dq)
                 
                 err = self.__coop_model.absolute_force_torque( (self.__coop_ur.state[0].f, self.__coop_ur.state[1].f))
