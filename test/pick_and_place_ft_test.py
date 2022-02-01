@@ -33,6 +33,7 @@ BASE = 'base_link'
 # TOOL = 'rigid_gripper'
 TOOL = 'obj'
 NUM_JOINTS = 6
+last_f_6 = np.array([0,0,0])
 
 
 JOINTS  = np.array([np.pi/2, -np.pi/2 + np.pi/6 - 0.2, -np.pi/2, -np.pi/2 - np.pi/6 + 0.2, np.pi/2, 0])
@@ -131,6 +132,9 @@ def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) 
     # Coefficients
     max_speed = 0.001
 
+    global last_f_6
+
+
     kf = 0.01/2
     ktau = 0.1
 
@@ -146,7 +150,6 @@ def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) 
         down_odirect_force_control.integral_time = time.time()
         down_odirect_force_control.integral = 0
         down_odirect_force_control.last_err = 0
-        down_odirect_force_control.last_f_6 = np.array([0,0,0,0,0,0])
 
 
     # time
@@ -169,10 +172,10 @@ def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) 
     # error
     goal = -z_force
     err_f = goal - f_6[2]
-    derr_f = (err_f - down_odirect_force_control.last0_err)/delta_t
-    d_f_6 = (f_6 - down_odirect_force_control.last_f_6)/delta_t
+    derr_f = (err_f - down_odirect_force_control.last_err)/delta_t
+    d_f_6 = (f_6 - last_f_6)/delta_t
     down_odirect_force_control.last_err = err_f
-    down_odirect_force_control.last_f_6 = f_6
+    last_f_6 = f_6
 
 
     # PID
@@ -186,8 +189,8 @@ def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) 
     omega = diff[3:]
     k_omega = 0.1
 
-    f_6[0] = kf*deadzone(f_6[0], 3) + k_d*d_f_6[0]
-    f_6[1] = kf*deadzone(f_6[1], 3) + k_d*d_f_6[1]
+    f_6[0] = kf*deadzone(f_6[0], 3) + k_d*d_f_6[0]*0
+    f_6[1] = kf*deadzone(f_6[1], 3) + k_d*d_f_6[1]*0
     f_6[2] = sum_f + sum_d + dirv[2]
     t_6[0] = ktau*deadzone(t_6[0], 0.04) + k_omega*omega[0]
     t_6[1] = ktau*deadzone(t_6[1], 0.04) + k_omega*omega[1]
