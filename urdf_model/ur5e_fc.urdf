@@ -346,7 +346,7 @@
     <child link="obj"/>
   </joint>
 
-  <link name="rigid_gripper">
+  <link name="rigid_gripper"/>
   <joint name="tool0-rigid-gripper-fixed-joint" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0.1126"/>
     <parent link="tool0"/>

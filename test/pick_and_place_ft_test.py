@@ -15,6 +15,7 @@ import URDriver
 from kdl_parser.kdl_parser_py.kdl_parser_py import urdf
 
 import numpy as np
+import numpy.linalg as LA
 
 from geometry_msgs.msg import WrenchStamped
 from sensor_msgs.msg import JointState
@@ -27,7 +28,9 @@ from gripper_pkg.srv import control
 J_NAMES = ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint']
 
 BASE = 'base_link'
-TOOL = 'tool0'
+# TOOL = 'tool0'
+# TOOL = 'rigid_gripper'
+TOOL = 'obj'
 NUM_JOINTS = 6
 
 
@@ -123,18 +126,24 @@ def down_direct_force_control(force: np.ndarray, z_force) -> np.ndarray:
 def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) -> np.ndarray:
     # Coefficients
     max_speed = 0.001
-    kf = 0.01
+
+    kf = 0.01/2
     ktau = 0.1
+
     vel = np.zeros(6)
     f_dzone = np.zeros(6)
     k_p = -0.0001
     k_i = -0.00001
     k_d = -0.00001
 
+    alpha_c = np.pi/12
+
     if not hasattr(down_odirect_force_control, 'integral'):
         down_odirect_force_control.integral_time = time.time()
         down_odirect_force_control.integral = 0
         down_odirect_force_control.last_err = 0
+        down_odirect_force_control.last_f_6 = np.array([0,0,0,0,0,0])
+
 
     # time
     i_new_time = time.time()
@@ -144,6 +153,10 @@ def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) 
     f_6 = rot_6_0.T.dot(force[:3])
     t_6 = rot_6_0.T.dot(force[3:])
 
+    ee = spm.SE3(spm.SO3(rot_6_0))
+    hole = spm.SE3.Rx(np.pi)
+    diff = ee.delta(hole)
+
     data = np.zeros(6)
     data[:3] = force[:3]
     data[3:] = t_6
@@ -152,8 +165,11 @@ def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) 
     # error
     goal = -z_force
     err_f = goal - f_6[2]
-    derr_f = (err_f - down_odirect_force_control.last_err)/delta_t
+    derr_f = (err_f - down_odirect_force_control.last0_err)/delta_t
+    d_f_6 = (f_6 - down_odirect_force_control.last_f_6)/delta_t
     down_odirect_force_control.last_err = err_f
+    down_odirect_force_control.last_f_6 = f_6
+
 
     # PID
     sum_f = k_p*err_f
@@ -163,12 +179,15 @@ def down_odirect_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) 
 
     dirv = -DIR_F if abs(f_6[2]) < 10 else DIR_F*0
 
-    f_6[0] = kf*deadzone(f_6[0], 3)
-    f_6[1] = kf*deadzone(f_6[1], 3)
+    omega = diff[3:]
+    k_omega = 0.1
+
+    f_6[0] = kf*deadzone(f_6[0], 3) + k_d*d_f_6[0]
+    f_6[1] = kf*deadzone(f_6[1], 3) + k_d*d_f_6[1]
     f_6[2] = sum_f + sum_d + dirv[2]
-    t_6[0] = ktau*deadzone(t_6[0], 0.04)
-    t_6[1] = ktau*deadzone(t_6[1], 0.04)
-    t_6[2] = ktau*deadzone(t_6[2], 0.04)
+    t_6[0] = ktau*deadzone(t_6[0], 0.04) + k_omega*omega[0]
+    t_6[1] = ktau*deadzone(t_6[1], 0.04) + k_omega*omega[1]
+    t_6[2] = ktau*deadzone(t_6[2], 0.04) + k_omega*omega[2]
     vel[:3] = rot_6_0.dot(f_6)
     vel[3:] = rot_6_0.dot(t_6)
 
@@ -246,6 +265,8 @@ def place_object(robot: URDriver.UniversalRobot) -> None:
     robot.control.moveL(PLACE_P + Z_A*0.4)
     time.sleep(0.5)
     robot.control.moveL(PLACE_P + Z_A*0.27)
+    # robot.control.moveL(PLACE_P + Z_A*0.14) #Rigid
+
 
 def send_joint_states(q: np.ndarray):
     state = JointState()
@@ -355,7 +376,7 @@ def main():
 
         if STAGE == 2:
             print('STAGE:', STAGE)
-            fdir = down_odirect_force_control(fe, 30, rot_6_0)
+            fdir = down_odirect_force_control(fe, 20, rot_6_0)
 
 
 
@@ -382,7 +403,7 @@ if __name__ == '__main__':
 
     # ROS
     rospy.init_node('pick_and_place_node')
-    robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'obj')
+    robot_model = URDriver.RobotModel(urdf_filepath, 'base', TOOL)
 
     # Publishers
     js_publisher = rospy.Publisher('/joint_states', JointState, queue_size=10)
