@@ -371,8 +371,8 @@ def place_object(robot: URDriver.UniversalRobot) -> None:
     close_gripper()
     robot.control.moveL(PLACE_P + Z_A*0.4)
     time.sleep(0.5)
-   # robot.control.moveL(PLACE_P + Z_A*0.27)
-    robot.control.moveL(PLACE_P + Z_A * 0.14)
+    robot.control.moveL(PLACE_P + Z_A*0.27)
+   # robot.control.moveL(PLACE_P + Z_A * 0.14)
 
 def send_joint_states(q: np.ndarray):
     state = JointState()
@@ -395,13 +395,13 @@ def send_wrench(f: np.ndarray):
     wr_publisher.publish(wrench)
 
 def open_gripper():
-    control_gripper(id=1, operation_type=110, speed=0, position=0)
+    control_gripper(id=0, operation_type=110, speed=0, position=0)
 
 def close_gripper():
-    control_gripper(id=1, operation_type=121, speed=30, position=0)
+    control_gripper(id=0, operation_type=121, speed=30, position=0)
 
 def free_gripper():
-    control_gripper(id=1, operation_type=100, speed=0, position=0)
+    control_gripper(id=0, operation_type=100, speed=0, position=0)
 
 
 
@@ -509,7 +509,7 @@ if __name__ == '__main__':
 
     # ROS
     rospy.init_node('pick_and_place_node')
-    robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'rigid_gripper')
+    robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'obj')
 
     # Publishers
     js_publisher = rospy.Publisher('/joint_states', JointState, queue_size=10)
