@@ -8,6 +8,7 @@ import spatialmath as spm
 import spatialmath.base as spmb
 import PyKDL
 import rospy
+import math
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
@@ -39,7 +40,10 @@ PICK_P  = np.array([-0.4, 0, 0.216, np.pi, 0, 0])
 # PLACE_P = np.array([0.085, 0.429, 0.0481, np.pi, 0, 0])
 # [0.0896 0.4143 0.0468 1.    ]
 # PLACE_P = np.array([0.0885, 0.4154, 0.0481, np.pi, 0, 0])
+
 PLACE_P = np.array([0.0851, 0.4255, 0.0472, np.pi, 0, 0])
+# PLACE_P = np.array([0.0851, 0.4255, 0.0352, np.pi, 0, 0])
+
 
 DIR     = np.array([0, 0, -0.01, 0, 0, 0])
 DIR_F   = np.array([0, 0, -0.1, 0, 0, 0])*0.01
@@ -246,8 +250,130 @@ def find_object_force_control(force: np.ndarray, z_force, rot_6_0: np.ndarray) -
 
     # print('err', err_f, derr_f)
     if np.abs(err_f) < 1:
-        STAGE = 2
+        STAGE = 1
 
+
+    return vel
+
+
+def detect_hole_force_control(force: np.ndarray, z_force: float) -> np.ndarray:
+
+    global STAGE
+
+    # Coefficients
+    max_speed = 0.001
+    max_torque = 0.04
+
+    vel = np.zeros(6)
+    k_p = -0.0001
+    k_i = -0.00001
+    k_d = -0.00001
+
+    period = 6
+    n = 3
+
+    if not hasattr(detect_hole_force_control, 'integral'):
+        detect_hole_force_control.start_time = time.time()
+        detect_hole_force_control.integral_time = time.time()
+        detect_hole_force_control.integral = 0
+        detect_hole_force_control.last_err = 0
+
+        detect_hole_force_control.forces_dict = {}
+        #минимальные и максимальные значения на каждой итерации
+        detect_hole_force_control.max_force_iteration = 0
+        detect_hole_force_control.max_force_direction_iteration = 0
+        detect_hole_force_control.min_force_iteration = 100
+        detect_hole_force_control.min_force_direction_iteration = 0
+
+
+        detect_hole_force_control.direction_list = []
+        detect_hole_force_control.last_rot_num = -1
+        detect_hole_force_control.stage_delay_init = 0
+    # time
+    i_new_time = time.time()
+    delta_t = i_new_time - detect_hole_force_control.integral_time
+    detect_hole_force_control.integral_time = i_new_time
+
+    # error
+    err_f = z_force - force[2]
+    derr_f = (err_f - detect_hole_force_control.last_err) / delta_t
+    detect_hole_force_control.last_err = err_f
+
+    # PID
+    sum_f = k_p * err_f
+    sum_f = sum_f if abs(sum_f) < max_speed else max_speed * sign(float(sum_f))
+    sum_d = k_d * derr_f
+    detect_hole_force_control.integral += k_i * delta_t * err_f
+
+    angle_to_rotate = (time.time() - detect_hole_force_control.start_time) / period*2*math.pi
+
+    data = np.zeros(6)
+    data[:3] = force[:3]
+    data[3:] = force[3:]
+
+
+    # анализ силы по оси z
+    detected_force = force[2]
+    # отклонение
+    if time.time() - detect_hole_force_control.start_time < period/4:
+        vel[3] = max_torque * math.cos(angle_to_rotate)
+    # Вращение
+    elif time.time() - detect_hole_force_control.start_time < period*n:
+        current_rot_num = angle_to_rotate // (2 * math.pi)
+        #Инициализация минимума и максимума
+        if len(detect_hole_force_control.direction_list) < current_rot_num+1:
+            detect_hole_force_control.direction_list.append(0)
+            print("update")
+            sum_angle = 0
+            counter = 0
+            print()
+            for key in detect_hole_force_control.forces_dict:
+                if detect_hole_force_control.forces_dict[key] < ((detect_hole_force_control.max_force_iteration+detect_hole_force_control.min_force_iteration)/3):
+                    print(key)
+                    if key < detect_hole_force_control.max_force_direction_iteration:
+                        sum_angle += key+math.pi*2
+                    else:
+                        sum_angle += key
+                    counter += 1
+            if counter > 0:
+                print("ang:_"+ str((sum_angle/counter)%(math.pi*2)))
+                detect_hole_force_control.direction_list[int(current_rot_num)]=(sum_angle/counter)
+                print(detect_hole_force_control.direction_list[int(current_rot_num)])
+
+            detect_hole_force_control.forces_dict = {}
+            detect_hole_force_control.min_force_iteration = 100
+            detect_hole_force_control.min_force_direction_iteration = 0
+            detect_hole_force_control.max_force_iteration = 0
+            detect_hole_force_control.max_force_direction_iteration = 0
+            # Вращение
+        vel[3] = max_torque * math.cos(angle_to_rotate)
+        vel[4] = max_torque * math.sin(angle_to_rotate)
+        data[1] = angle_to_rotate
+        # проверка минимумов и максимумов только после первого вращения
+        if (time.time() - detect_hole_force_control.start_time > period):
+            detect_hole_force_control.forces_dict[angle_to_rotate] = detected_force
+        #минимальная сила на итерации
+            if detected_force < detect_hole_force_control.min_force_iteration:
+                detect_hole_force_control.min_force_direction_iteration = angle_to_rotate
+                detect_hole_force_control.min_force_iteration = detected_force
+        # максимальная сила на итерациии
+            if detected_force > detect_hole_force_control.max_force_iteration:
+                detect_hole_force_control.max_force_direction_iteration = angle_to_rotate
+                detect_hole_force_control.max_force_iteration = detected_force
+
+    #перемещение в направлении отверстия
+    else:
+
+        if detect_hole_force_control.stage_delay_init == 0:
+            print(detect_hole_force_control.direction_list)
+            detect_hole_force_control.stage_delay_init = time.time()
+        vel[0] = max_speed * 2 * math.cos(detect_hole_force_control.direction_list[2]+math.pi-math.pi/15)
+        vel[1] = max_speed * 2 * math.sin(detect_hole_force_control.direction_list[2]+math.pi-math.pi/15)
+        dirv = DIR_F if abs(force[2]) < 10 else DIR_F * 0
+        vel[2] = sum_f + sum_d + dirv[2]
+        if (force[2] < 7 or force[1] > 20 or force[0] > 20) and time.time()-detect_hole_force_control.stage_delay_init > 2:
+            STAGE = 2
+    send_wrench(data)
     return vel
 
 def pick_object(robot: URDriver.UniversalRobot) -> None:
@@ -325,7 +451,6 @@ def main():
     robot1.control.zeroFtSensor()
     robot1.update_state()
 
-
     circ_msg = rospy.wait_for_message('/circle_pose', Pose, timeout=None)
     print(circ_msg)
 
@@ -372,7 +497,8 @@ def main():
             fdir = find_object_force_control(fe, 20, rot_6_0)
 
         if STAGE == 1:
-            pass
+         #   print('STAGE:', STAGE)
+            fdir = detect_hole_force_control(fe, 30)
 
         if STAGE == 2:
             print('STAGE:', STAGE)
