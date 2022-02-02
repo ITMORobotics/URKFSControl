@@ -13,6 +13,8 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import URDriver
 from kdl_parser.kdl_parser_py.kdl_parser_py import urdf
+import matplotlib.pyplot as plt
+import pandas as pd
 
 import numpy as np
 
@@ -30,7 +32,7 @@ BASE = 'base_link'
 TOOL = 'tool0'
 NUM_JOINTS = 6
 
-
+EYE = np.eye(3, 3)
 
 JOINTS  = np.array([np.pi/2, -np.pi/2 + np.pi/6 - 0.2, -np.pi/2, -np.pi/2 - np.pi/6 + 0.2, np.pi/2, 0])
 PICK_P  = np.array([-0.4, 0, 0.216, np.pi, 0, 0])
@@ -62,19 +64,6 @@ def deadzone(val, level):
     out = val if abs(val) > level else 0
     return out
 
-def direct_force_control(force: np.ndarray) -> np.ndarray:
-    kf = 0.001
-    ktau = 0.1
-    vel = np.zeros(6)
-    vel[0] = kf*deadzone(force[0], 3)
-    vel[1] = kf*deadzone(force[1], 3)
-    vel[2] = kf*deadzone(force[2], 3)
-    vel[3] = ktau*deadzone(force[3], 0.25)
-    vel[4] = ktau*deadzone(force[4], 0.25)
-    vel[5] = ktau*deadzone(force[5], 0.25)
-
-    return vel
-
 def sign(val: float) -> float:
     return (val > 0) - (val < 0)
 
@@ -89,7 +78,7 @@ def pick_object(robot: URDriver.UniversalRobot) -> None:
 def place_object(robot: URDriver.UniversalRobot) -> None:
     robot.control.moveL(PLACE_P + Z_A*0.4)
     time.sleep(0.5)
-    robot.control.moveL(PLACE_P + Z_A*0.27)
+    robot.control.moveL(PLACE_P + Z_A*0.4)
 
 def send_joint_states(q: np.ndarray):
     state = JointState()
@@ -111,8 +100,64 @@ def send_wrench(f: np.ndarray):
     wrench.wrench.torque.z  = f[5]
     wr_publisher.publish(wrench)
 
-def load_regressor(q: np.ndarray, rot_6_0: np.ndarray) -> np.ndarray:
-    pass
+def set_orientation(zd: np.ndarray, z2: np.ndarray, angle: float):
+    vel = np.zeros(6)
+
+    diff = -1*(zd - z2)
+    w = np.cross(z2, diff)
+
+    vel[3:] = w
+    return (np.linalg.norm(w) < 1e-4), vel
+
+def rpy2rv(roll, pitch, yaw):
+
+    alpha = yaw
+    beta = pitch
+    gamma = roll
+
+    ca = np.cos(alpha)
+    cb = np.cos(beta)
+    cg = np.cos(gamma)
+    sa = np.sin(alpha)
+    sb = np.sin(beta)
+    sg = np.sin(gamma)
+
+    r11 = ca*cb
+    r12 = ca*sb*sg-sa*cg
+    r13 = ca*sb*cg+sa*sg
+    r21 = sa*cb
+    r22 = sa*sb*sg+ca*cg
+    r23 = sa*sb*cg-ca*sg
+    r31 = -sb
+    r32 = cb*sg
+    r33 = cb*cg
+
+    theta = np.arccos((r11+r22+r33-1)/2)
+    sth = np.sin(theta)
+    kx = (r32-r23)/(2*sth)
+    ky = (r13-r31)/(2*sth)
+    kz = (r21-r12)/(2*sth)
+
+    return [(theta*kx),(theta*ky),(theta*kz)]
+
+def skew(x):
+    return np.array([
+        [0, -x[2], x[1]],
+        [x[2], 0, -x[0]],
+        [-x[1], x[0], 0]
+    ])
+
+def esimate(G: np.ndarray, x_n: np.ndarray, fi: np.ndarray, F: np.ndarray):
+    G = G - G @ fi @ np.linalg.inv(np.eye(3, 3) + fi.T @ G @ fi) @ fi.T @ G
+    x_n = x_n - G @ fi @ (fi.T @ x_n - F)
+
+    return G, x_n
+
+def load_f_regressor() -> np.ndarray:
+    return EYE
+
+def load_t_regressor(f: np.ndarray, rot_6_0: np.ndarray) -> np.ndarray:
+    return -skew(f) @ rot_6_0
 
 def load_parameters_estimation(f: np.ndarray, regr: np.ndarray) -> np.ndarray:
     pass
@@ -122,11 +167,11 @@ def main():
     global PLACE_P
 
     # Initialize median filter
-    median = md.MedianFilter(NUM_JOINTS, 5)
+    median = md.MedianFilter(NUM_JOINTS, 17)
 
     # Parameters
-    velocity = 0.1
-    acceleration = 0.1
+    velocity = 0.0001
+    acceleration = 0.0001
     dt = 1.0/500  # 2ms
     lookahead_time = 0.1
     gain = 300
@@ -136,61 +181,58 @@ def main():
 
     # Move to initial position
     robot1.control.moveJ(JOINTS)
-    time.sleep(5)
+    # time.sleep(5)
 
-    # Reset force sensor
-    robot1.control.zeroFtSensor()
     robot1.update_state()
-
-
-    circ_msg = rospy.wait_for_message('/circle_pose', Pose, timeout=None)
-    print(circ_msg)
-
-    circ_p = np.array([circ_msg.position.x, circ_msg.position.y, 0, 1])
-    p_6, _ = robot_model.pose_angvec(robot1.state.q)
-    r_6    = robot_model.rot(robot1.state.q)
-    transform_6_0 = spm.SE3(*p_6) @ spm.SE3(spmb.r2t(r_6, check=True))
-    transform_camera = transform_6_0 @ spm.SE3(-0.0305, -0.10218, 0.03445)
-    circ_p = transform_camera.A.dot(circ_p)
-    PLACE_P[0] = circ_p[0]
-    PLACE_P[1] = circ_p[1]
-
 
     # Pick and place object
     place_object(robot1)
 
-    # Reset force sensor
-    robot1.control.zeroFtSensor()
     robot1.update_state()
 
-    fdir = DIR
+    # Get actual PLACE_P + Z_A*0.4 Rotation matrix
+    rot_6_0 = robot_model.rot(robot1.state.q)
+    ee = spm.SO3(rot_6_0)
+
+    new_rot = spm.SO3.Rx(np.pi/6) @ ee
+    place = np.copy(PLACE_P + Z_A*0.4)
+    place[3:] = rpy2rv(*new_rot.rpy())
+    robot1.control.moveL(place)
+
+
+    params = np.zeros(3)
+    h = np.eye(3, 3)
+
+    array = []
 
     while True:
+
         start = time.time()
 
         # state
         robot1.update_state()
-        send_joint_states(robot1.state.q)
 
-        # Use medial filter to get forces
+        send_wrench(robot1.state.f)
+        rot_6_0 = spm.SO3(robot_model.rot(robot1.state.q))
         fe = np.array(median.apply_median(robot1.state.f)).flatten()
-        jac = robot_model.jacobian(robot1.state.q)
-
-        # send_wrench(robot1.state.f)
-        rot_6_0 = robot_model.rot(robot1.state.q)
+        # array.append(np.concatenate((robot1.state.q, fe)))
 
         # Control
         # Sprial movement
+        new_rot = spm.SO3.Rz(0.001) @ new_rot
+        xx = np.cross(ee.o, new_rot.a)
+        rot_n = spm.SE3.OA(np.cross(new_rot.a, xx), new_rot.a)
+        place[3:] = rpy2rv(*rot_n.rpy())
 
-        # Parameters estimation
+        f_regr = load_f_regressor()
+        h, params = esimate(h, params, f_regr, fe[:3])
 
-
-
-        # Calculate speed vector using Manipulator Jacobian
-        jspeed = np.linalg.pinv(jac).dot(fdir)
+        aaa = np.zeros(6)
+        aaa[:3] = params
+        # send_wrench(params)
 
         # Move manipulator
-        robot1.control.speedJ(jspeed, acceleration, dt)
+        robot1.control.servoL(place, velocity, acceleration, dt, lookahead_time, gain)
 
         end = time.time()
         duration = end - start
@@ -198,6 +240,8 @@ def main():
             time.sleep(dt - duration)
 
         if rospy.is_shutdown():
+            # df = pd.DataFrame(array)
+            # df.to_csv('ft_sensor.csv', index=False)
             break
 
 
@@ -208,7 +252,8 @@ if __name__ == '__main__':
 
     # ROS
     rospy.init_node('online_ft_calibrator')
-    robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'obj')
+    # robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'obj')
+    robot_model = URDriver.RobotModel(urdf_filepath, 'base', 'tool0')
 
     # Publishers
     js_publisher = rospy.Publisher('/joint_states', JointState, queue_size=10)
