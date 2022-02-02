@@ -44,7 +44,7 @@ def main():
     # time.sleep(1.0)
     coop_system.open_gripper(('left', 'right'))
     time.sleep(1.0)
-    coop_system.p2p_cartmove_avoid(copy.deepcopy(coop_state0), 10.0, True)
+    coop_system.p2p_cartmove_avoid(copy.deepcopy(coop_state0), 7.0, True)
     # time.sleep(1.0)
     coop_system.p2p_cartmove_avoid(copy.deepcopy(coop_state1), 5.0, False)
     coop_system.close_gripper(('left', 'right'))

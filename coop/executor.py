@@ -75,7 +75,7 @@ class CoopSmartSystem():
                 target_coop_abs_pose1, target_coop_abs_orient1, target_coop_rel_pose1, target_coop_rel_orient1 = trj_state_t.to_pose_rot()
                 print("Abs:\n", coop_state_from.abs_tf)
                 print("Rel:\n", coop_state_from.rel_tf)
-                control_dq = self.__coop_hybride_controller.hybride_world_control(
+                control_dq, control_twist = self.__coop_hybride_controller.hybride_world_control(
                     target_coop_abs_pose1,
                     target_coop_abs_orient1,
                     target_coop_rel_pose1,
@@ -142,7 +142,7 @@ class CoopSmartSystem():
 
                 target_coop_abs_pose1, target_coop_abs_orient1, target_coop_rel_pose1, target_coop_rel_orient1 = trj_state_t.to_pose_rot()
                 print(trj_state_t.abs_tf)
-                control_dq = self.__coop_hybride_controller.hybride_world_control(
+                control_dq, control_twist = self.__coop_hybride_controller.hybride_world_control(
                     target_coop_abs_pose1,
                     target_coop_abs_orient1,
                     target_coop_rel_pose1,
@@ -202,7 +202,7 @@ class CoopSmartSystem():
             if norm_err > 10.0:
                 time_start_free = time.time()
 
-            control_dq = self.__coop_hybride_controller.hybride_world_control(
+            control_dq, control_twist = self.__coop_hybride_controller.hybride_world_control(
                 np.zeros(3),
                 np.identity(3),
                 target_coop_rel_pose,

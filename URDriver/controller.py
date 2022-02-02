@@ -212,8 +212,10 @@ class CooperativeController():
         if jacob_rank < abs_rel_jacob.shape[0]:
             print("Given jacobian is singular")
             control_dq = np.zeros(q1.shape)
+            control_twist = np.zeros(6)
         else:
             control_dq = np.linalg.pinv(self.__coop_model.abs_rel_jacobian((q1,q2))) @ (target_move_twist + target_force_twist)
+            control_twist = (target_move_twist + target_force_twist)
             # print("Control dq: \n", control_dq)
-        return control_dq
+        return control_dq, control_twist
 
