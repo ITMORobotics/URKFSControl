@@ -48,6 +48,7 @@ class CooperativeController():
         self.__coop_stiff_matrix = coop_stiff_matrix
         self.__coop_model = coop_model
         self.__pi_control = MPIController(self.__coop_P_matrix, self.__coop_I_matrix, dt)
+        
     
     def reset(self):
         self.__pi_control.reset()
@@ -150,6 +151,69 @@ class CooperativeController():
             control_dq = np.zeros(q1.shape)
         else:
             control_dq = np.linalg.pinv(self.__coop_model.abs_rel_jacobian((q1,q2))) @ (target_move_twist)
+            # print("Control dq: \n", control_dq)
+        return control_dq
+
+    
+    def hybride_world_control(self,
+        target_coop_abs_pose: np.ndarray,
+        target_coop_abs_orient: np.ndarray,
+        target_coop_rel_pose: np.ndarray,
+        target_coop_rel_orient: np.ndarray,
+
+        target_coop_abs_ft: np.ndarray,
+        target_coop_rel_ft: np.ndarray,
+        q: Tuple[np.ndarray],
+        ft: Tuple[np.ndarray],
+        selection_matrix_T: np.ndarray,
+        selection_matrix_Y: np.ndarray
+        ) -> np.ndarray:
+        
+        # Reasign state values
+        q1,q2 = q
+        ft1,ft2 = ft
+
+        abs_rot = self.__coop_model.absolute_orient((q1,q2))
+        block_abs_rot = scipy.linalg.block_diag(np.identity(3), np.identity(3)) # kroneker product for creating block diagonal matrix
+        
+        rel_rot = self.__coop_model.relative_orient((q1,q2))
+        block_rel_rot = scipy.linalg.block_diag(abs_rot, np.identity(3))
+
+        block_rot = scipy.linalg.block_diag(block_abs_rot, block_rel_rot)
+        # print("Current pose: \n", self.__coop_model.relative_pose((q1,q2)))
+        # Calculating absolute  errors for  pose and orientation
+        abs_pose_error = target_coop_abs_pose - self.__coop_model.absolute_pose((q1,q2))
+        abs_orient_error = target_coop_abs_orient @ abs_rot.T
+
+        abs_orient_error_tf = SE3(abs_pose_error) @ SE3(SO3(abs_orient_error, check=False))
+        abs_orient_twist_error = abs_orient_error_tf.twist().A[3:]
+
+        # Calculating relative errors for pose and orientation
+        rel_pose_error = target_coop_rel_pose - abs_rot.T @ self.__coop_model.relative_pose((q1,q2))
+        rel_orient_error = target_coop_rel_orient @ rel_rot.T
+
+        rel_orient_error_tf = SE3(rel_pose_error) @ SE3(SO3(rel_orient_error, check=False))
+        rel_orient_twist_error = rel_orient_error_tf.twist().A[3:]
+        # print(rel_pose_error)
+        
+        abs_ft_error = target_coop_abs_ft - block_abs_rot.T @ self.__coop_model.absolute_force_torque((ft1,ft2))
+        rel_ft_error = target_coop_abs_ft - block_rel_rot.T @self.__coop_model.relative_force_torque((ft1,ft2))
+
+        error_move_coop = np.concatenate((abs_pose_error, abs_orient_twist_error, rel_pose_error, rel_orient_twist_error), axis=0)
+        error_force_coop = np.concatenate((abs_ft_error, rel_ft_error), axis=0)
+
+        target_move_twist = block_rot @ selection_matrix_T @ self.__pi_control.u(error_move_coop)
+        target_force_twist = block_rot @ selection_matrix_Y @ self.__coop_stiff_matrix @ -error_force_coop
+        # print("Target move twist: \n", target_move_twist)
+        # print("rel pose: \n", coop_model.relative_pose((q1,q2)) )
+        control_dq = np.zeros(q1.shape)
+        abs_rel_jacob = self.__coop_model.abs_rel_jacobian((q1,q2))
+        jacob_rank = np.linalg.matrix_rank(abs_rel_jacob, 1e-5)
+        if jacob_rank < abs_rel_jacob.shape[0]:
+            print("Given jacobian is singular")
+            control_dq = np.zeros(q1.shape)
+        else:
+            control_dq = np.linalg.pinv(self.__coop_model.abs_rel_jacobian((q1,q2))) @ (target_move_twist + target_force_twist)
             # print("Control dq: \n", control_dq)
         return control_dq
 
