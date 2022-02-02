@@ -12,10 +12,13 @@ import URDriver
 
 # s1 = serial.Serial('/dev/gripper_left')
 gripper_left = GripperSerialController('/dev/gripper_left', 57600)
-# gripper_right = GripperSerialController(serial.Serial('/dev/gripper_right'), 57600)
+gripper_right = GripperSerialController('/dev/gripper_right', 57600)
 
 gripper_left.open()
+gripper_right.open()
 time.sleep(1.0)
 gripper_left.close()
+gripper_right.close()
 time.sleep(1.0)
 gripper_left.open()
+gripper_right.open()

@@ -16,7 +16,7 @@
       <timeout>5</timeout>
       <powerStateTopic>power_state</powerStateTopic>
       <powerStateRate>10.0</powerStateRate>
-      <fullChargeCapacity>87.78</fullChargeCapacity>     
+      <fullChargeCapacity>87.78</fullChargeCapacity>
       <dischargeRate>-474</dischargeRate>
       <chargeRate>525</chargeRate>
       <dischargeVoltage>15.52</dischargeVoltage>
@@ -331,7 +331,7 @@
     <parent link="wrist_3_link"/>
     <child link="tool0"/>
   </joint>
-  
+
   <!-- Frame for gripper point -->
   <link name="gripper_link"/>
   <joint name="tool0-gripper_link_fixed_joint" type="fixed">
@@ -345,7 +345,6 @@
     <parent link="world"/>
     <child link="base_link"/>
     <!-- It's callibrated data -->
-    <origin rpy="-0.0043 -0.0153 -3.0625" xyz="0.1029 -1.0467 -0.0810"/>
+    <origin rpy="-0.0012 -0.0082 -3.0759" xyz="0.1029 -1.0460 -0.0683"/>
   </joint>
 </robot>
-

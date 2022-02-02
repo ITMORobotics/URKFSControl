@@ -240,3 +240,9 @@ def generate_simple_selection_matrix(allow_moves: np.ndarray) ->Tuple[np.ndarray
     else:
         result_matrix_Y = np.concatenate(Y_list, axis=1)
     return (result_matrix_T, result_matrix_Y)
+
+
+def generate_square_selection_matrix(allow_moves: np.ndarray) ->Tuple[np.ndarray, np.ndarray]:
+    T_matrix = np.diag(allow_moves)
+    Y_matrix = np.identity(T_matrix.shape[0])-T_matrix
+    return (T_matrix, Y_matrix)
