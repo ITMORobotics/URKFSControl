@@ -108,7 +108,22 @@ class RobotModel:
     def twist(self, q: np.ndarray, dq: np.ndarray) -> np.ndarray:
         self.__fk_velsolver.JntToCart(to_jnt_array_vel(q, dq), self.__vel_frame)
         return to_np_matrix(self.__vel_frame.GetTwist(), 6)
-
+    
+    def nik_q(self, tf_matrix: np.ndarray, init_q: np.ndarray) -> np.ndarray:
+        r = kdl.Rotation(*list(tf_matrix[:3,:3].flatten()))
+        # print(r)
+        p = kdl.Vector(*list(tf_matrix[:3,3].flatten()))
+        # print(tf_matrix[:3,3].flatten())
+        given_frame = kdl.Frame(r, p)
+        out = kdl.JntArray(init_q.shape[0])
+        self.__ik_posesolver.CartToJnt(to_jnt_array(init_q), given_frame, out)
+        nq = np.remainder(to_np_matrix(out, init_q.shape[0]),2*np.pi)
+        for i in range(0, nq.shape[0]):
+            if nq[i] > np.pi:
+                nq[i] -= 2*np.pi
+            elif nq[i] < -np.pi:
+                nq[i] += 2*np.pi
+        return nq
 
 def to_np_matrix(kdl_data, size: int) -> np.ndarray:
     if isinstance(kdl_data, (kdl.JntSpaceInertiaMatrix, kdl.Jacobian, kdl.Rotation)):

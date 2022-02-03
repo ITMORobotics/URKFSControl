@@ -101,7 +101,7 @@ class DualCoopModel:
         return rel_jacob
     
     def absolute_jacobian(self, q_tuple: Tuple[np.ndarray]) -> np.ndarray:
-        rel_jacob = np.concatenate((1.0/2*self.__coop_model[0].jacobian(q_tuple[0]), 1.0/2*self.__coop_model[1].jacobian(q_tuple[1])), axis=1)
+        rel_jacob = np.concatenate((-1.0/2*self.__coop_model[0].jacobian(q_tuple[0]), 1.0/2*self.__coop_model[1].jacobian(q_tuple[1])), axis=1)
         return rel_jacob
 
     def abs_rel_jacobian(self, q_tuple: Tuple[np.ndarray]) -> np.ndarray:
