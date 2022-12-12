@@ -345,6 +345,6 @@
     <parent link="world"/>
     <child link="base_link"/>
     <!-- It's callibrated data -->
-    <origin rpy="-0.0012 -0.0082 -3.0759" xyz="0.1029 -1.0460 -0.0683"/>
+    <origin rpy="0.0 0.0 -3.14159265359" xyz="0.0 0.0 0.0"/>
   </joint>
 </robot>

@@ -7,8 +7,6 @@ import time
 from spatialmath import SE3,SO3, Twist3
 from scipy.spatial.transform import Rotation as R
 
-from gripper_controller import GripperSerialController
-
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from kdl_parser.kdl_parser_py.kdl_parser_py import urdf
 from URDriver import robot
@@ -33,7 +31,7 @@ class CoopSmartSystem():
         self.__coop_model = coop_robot.DualCoopModel((self.__robot_model_left, self.__robot_model_right))
         self.__dt = 0.02
         self.__coop_ur = coop_robot.DualUniversalRobot(ip1, ip2, self.__dt)
-        self.__grippers = {'left': GripperSerialController('/dev/gripper_left', 57600),'right': GripperSerialController('/dev/gripper_right', 57600)}
+        # self.__grippers = {'left': GripperSerialController('/dev/gripper_left', 57600),'right': GripperSerialController('/dev/gripper_right', 57600)}
         time.sleep(1.5)
         self.__coop_hybride_controller = controller.CooperativeController(self.__coop_model, self.__coop_stiff_matrix_full, self.__coop_P_matrix_full, self.__coop_I_matrix_full, self.__dt)
         self.zeroFT()
